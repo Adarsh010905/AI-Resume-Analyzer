@@ -44,6 +44,8 @@ class LoginView(APIView):
             return Response({'error': 'Email and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         user = authenticate(request, email=email, password=password)
+        if user is None:
+            user = authenticate(request, username=email, password=password)
 
         if user is None:
             logger.warning(f"Failed login attempt for email: {email}")

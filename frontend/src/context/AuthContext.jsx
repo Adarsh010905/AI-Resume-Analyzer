@@ -4,7 +4,15 @@ import api from '../services/api';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('user');
+      const token = localStorage.getItem('access_token');
+      return token && stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -19,12 +27,18 @@ export function AuthProvider({ children }) {
       try {
         const profileData = await api.auth.getProfile();
         setUser(profileData);
-      } catch {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user');
-        setUser(null);
+        localStorage.setItem('user', JSON.stringify(profileData));
+      } catch (err) {
+        // If 401, tokens were expired and refresh failed
+        if (err.status === 401) {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('user');
+          setUser(null);
+        }
       }
+    } else {
+      setUser(null);
     }
     setIsLoading(false);
   };

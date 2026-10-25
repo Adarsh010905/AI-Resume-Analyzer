@@ -18,30 +18,42 @@ async function request(endpoint, options = {}, isFormData = false) {
     headers: { ...headers, ...options.headers },
   };
 
+  const isAuthEndpoint =
+    endpoint.includes('/api/auth/login') ||
+    endpoint.includes('/api/auth/register') ||
+    endpoint.includes('/api/auth/token/refresh');
+
+  let response;
   try {
-    const response = await fetch(url, config);
-
-    if (response.status === 401) {
-      const refreshed = await refreshAccessToken();
-      if (refreshed) {
-        headers['Authorization'] = `Bearer ${localStorage.getItem('access_token')}`;
-        const retryResponse = await fetch(url, { ...config, headers });
-        return handleResponse(retryResponse);
-      } else {
-        localStorage.clear();
-        window.location.href = '/login';
-        return;
-      }
-    }
-
-    return handleResponse(response);
-  } catch (error) {
+    response = await fetch(url, config);
+  } catch (networkError) {
     throw new Error('Network error: Could not connect to the server.');
   }
+
+  if (response.status === 401 && !isAuthEndpoint) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      const retryHeaders = { ...headers, ...options.headers };
+      retryHeaders['Authorization'] = `Bearer ${localStorage.getItem('access_token')}`;
+      try {
+        const retryResponse = await fetch(url, { ...config, headers: retryHeaders });
+        return await handleResponse(retryResponse);
+      } catch (networkError) {
+        throw new Error('Network error: Could not connect to the server.');
+      }
+    } else {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      return;
+    }
+  }
+
+  return await handleResponse(response);
 }
 
 async function handleResponse(response) {
-  // Handle 204 No Content (logout returns this)
   if (response.status === 204 || response.headers.get('content-length') === '0') {
     if (!response.ok) throw new Error('Request failed');
     return {};
